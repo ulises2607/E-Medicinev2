@@ -1,11 +1,22 @@
+// src/server.js
 import app from "./app.js";
-import { testDbConnection } from "./config/sequelize.js"; // Importa la función de prueba
+import sequelize, { testDbConnection } from "./config/sequelize.js"; // Importa la instancia de sequelize
+import db from "./daos/models/index.js"; // Importa nuestros modelos inicializados
 
 const PORT = process.env.PORT || 4700;
 
 const startServer = async () => {
   try {
-    await testDbConnection(); // Prueba la conexión antes de iniciar el servidor
+    await testDbConnection(); // Prueba la conexión
+
+    // Sincronizar modelos con la base de datos (opcional, ya creamos tablas manualmente)
+    // En desarrollo, puedes usar { alter: true } para que Sequelize intente ajustar las tablas.
+    // En producción, es mejor usar migraciones.
+    await sequelize.sync(); // No usar force: true en producción, borra las tablas.
+    // O puedes sincronizar un modelo específico:
+    await db.Usuario.sync();
+    console.log("Modelos sincronizados (o verificados) con la base de datos.");
+
     app.listen(PORT, () => {
       console.log(`Servidor escuchando en el puerto ${PORT}`);
       console.log(
@@ -13,7 +24,7 @@ const startServer = async () => {
       );
     });
   } catch (error) {
-    console.error("Error al iniciar el servidor:", error);
+    console.error("Error al iniciar el servidor o sincronizar modelos:", error);
     process.exit(1);
   }
 };
