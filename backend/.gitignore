@@ -1,0 +1,24 @@
+# Dependencias
+node_modules/
+
+# Archivos de entorno
+.env
+*.env
+!.env.example # Si decides tener un ejemplo de .env
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+*.swp
+
+# Archivos del sistema operativo
+.DS_Store
+Thumbs.db
+
+# Archivos de build (si los hubiera más adelante)
+dist/
+build/
