@@ -14,8 +14,8 @@ const startServer = async () => {
     // En producción, es mejor usar migraciones.
     await sequelize.sync(); // No usar force: true en producción, borra las tablas.
     // O puedes sincronizar un modelo específico:
-    await db.Usuario.sync();
-    console.log("Modelos sincronizados (o verificados) con la base de datos.");
+    // await db.Usuario.sync();
+    await db.sequelize.sync();
 
     app.listen(PORT, () => {
       console.log(`Servidor escuchando en el puerto ${PORT}`);
