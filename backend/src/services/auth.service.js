@@ -1,6 +1,7 @@
 // src/services/auth.service.js
 import bcrypt from "bcrypt";
 import db from "../daos/models/index.js"; // Importa el objeto db con todos los modelos y sequelize
+import jwt from "jsonwebtoken";
 // import { generateConfirmationString } from '../utils/generateId.js'; // Descomenta si lo usas
 
 // Función para hashear contraseñas
@@ -127,7 +128,68 @@ class AuthService {
     }
   }
 
-  // async loginUser(email, password) { ... } (lo implementaremos después)
+  async loginUser(email, password) {
+    // 1. Validar que el email y la contraseña se proporcionaron
+    if (!email || !password) {
+      const error = new Error(
+        "El correo electrónico y la contraseña son obligatorios."
+      );
+      error.statusCode = 400; // Bad Request
+      throw error;
+    }
+
+    // 2. Buscar al usuario por email
+    const user = await db.Usuario.findOne({
+      where: { email },
+      include: [
+        // Incluimos los perfiles para saber el rol y datos asociados
+        { model: db.Paciente, as: "pacienteInfo" },
+        { model: db.Doctor, as: "doctorInfo" },
+      ],
+    });
+
+    if (!user) {
+      const error = new Error("Credenciales inválidas."); // Mensaje genérico por seguridad
+      error.statusCode = 401; // Unauthorized
+      throw error;
+    }
+
+    // 3. (Opcional) Verificar si la cuenta está confirmada
+    // if (!user.confirmed) {
+    //   const error = new Error('Tu cuenta no ha sido confirmada.');
+    //   error.statusCode = 403; // Forbidden
+    //   throw error;
+    // }
+
+    // 4. Comparar la contraseña proporcionada con el hash almacenado
+    const isPasswordCorrect = await bcrypt.compare(
+      password,
+      user.password_hash
+    );
+    if (!isPasswordCorrect) {
+      const error = new Error("Credenciales inválidas."); // Mensaje genérico
+      error.statusCode = 401; // Unauthorized
+      throw error;
+    }
+
+    // 5. Generar el JWT
+    const payload = {
+      userId: user.id,
+      role: user.role,
+    };
+
+    const token = jwt.sign(
+      payload,
+      process.env.JWT_SECRET,
+      { expiresIn: "1d" } // Define la expiración del token (ej. 1 día, 7d, 1h)
+    );
+
+    // 6. Preparar los datos del usuario para devolver (sin el hash)
+    const { password_hash, confirmation_string, ...userToReturn } =
+      user.toJSON();
+
+    return { token, user: userToReturn }; // Devolvemos el token y la info del usuario
+  }
 }
 
 export default new AuthService();
