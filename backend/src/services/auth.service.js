@@ -190,6 +190,136 @@ class AuthService {
 
     return { token, user: userToReturn }; // Devolvemos el token y la info del usuario
   }
+
+  async updateUserProfile(userId, updateData) {
+    const {
+      // Campos comunes de la tabla 'usuarios' que se pueden actualizar
+      firstName,
+      lastName,
+      phoneNumber,
+      photoUrl,
+      gender,
+      country,
+      city,
+      address,
+      postalCode,
+      dateOfBirth,
+      // Campos específicos del rol
+      // Para Paciente:
+      creditCardToken,
+      // Para Doctor:
+      speciality,
+      consultationValue,
+      idDocumentType,
+      idDocumentNumber,
+      availabilityStatus,
+      // No permitimos cambiar email o rol desde aquí por simplicidad y seguridad
+      // El cambio de contraseña tendría su propio endpoint/flujo
+    } = updateData;
+
+    const user = await db.Usuario.findByPk(userId, {
+      include: [
+        // Incluimos los perfiles para saber el rol
+        { model: db.Paciente, as: "pacienteInfo" },
+        { model: db.Doctor, as: "doctorInfo" },
+      ],
+    });
+
+    if (!user) {
+      const error = new Error("Usuario no encontrado.");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    // Separar los campos que van a la tabla 'usuarios'
+    const userDataToUpdate = {};
+    if (firstName !== undefined) userDataToUpdate.first_name = firstName;
+    if (lastName !== undefined) userDataToUpdate.last_name = lastName;
+    if (phoneNumber !== undefined) userDataToUpdate.phone_number = phoneNumber;
+    if (photoUrl !== undefined) userDataToUpdate.photo_url = photoUrl;
+    if (gender !== undefined) userDataToUpdate.gender = gender;
+    if (country !== undefined) userDataToUpdate.country = country;
+    if (city !== undefined) userDataToUpdate.city = city;
+    if (address !== undefined) userDataToUpdate.address = address;
+    if (postalCode !== undefined) userDataToUpdate.postal_code = postalCode;
+    if (dateOfBirth !== undefined) userDataToUpdate.date_of_birth = dateOfBirth;
+
+    try {
+      await db.sequelize.transaction(async (t) => {
+        // Actualizar la tabla 'usuarios' si hay datos para ello
+        if (Object.keys(userDataToUpdate).length > 0) {
+          await user.update(userDataToUpdate, { transaction: t });
+        }
+
+        // Actualizar la tabla 'pacientes' o 'doctores' según el rol
+        if (user.role === "patient" && user.pacienteInfo) {
+          const patientDataToUpdate = {};
+          if (creditCardToken !== undefined)
+            patientDataToUpdate.credit_card_token = creditCardToken;
+          // Añadir más campos específicos de paciente aquí si los tienes
+
+          if (Object.keys(patientDataToUpdate).length > 0) {
+            await user.pacienteInfo.update(patientDataToUpdate, {
+              transaction: t,
+            });
+          }
+        } else if (user.role === "doctor" && user.doctorInfo) {
+          const doctorDataToUpdate = {};
+          if (speciality !== undefined)
+            doctorDataToUpdate.speciality = speciality;
+          if (consultationValue !== undefined)
+            doctorDataToUpdate.consultation_value = consultationValue;
+          if (idDocumentType !== undefined)
+            doctorDataToUpdate.id_document_type = idDocumentType;
+          if (idDocumentNumber !== undefined)
+            doctorDataToUpdate.id_document_number = idDocumentNumber;
+          if (availabilityStatus !== undefined)
+            doctorDataToUpdate.availability_status = availabilityStatus;
+          // Añadir más campos específicos de doctor aquí
+
+          if (Object.keys(doctorDataToUpdate).length > 0) {
+            await user.doctorInfo.update(doctorDataToUpdate, {
+              transaction: t,
+            });
+          }
+        }
+      });
+
+      // Recargar el usuario con la información actualizada
+      const updatedUserProfile = await db.Usuario.findByPk(userId, {
+        attributes: { exclude: ["password_hash", "confirmation_string"] },
+        include: [
+          { model: db.Paciente, as: "pacienteInfo" },
+          {
+            model: db.Doctor,
+            as: "doctorInfo",
+            include: [
+              { model: db.CertificadoProfesional, as: "certificados" },
+              { model: db.DisponibilidadDoctor, as: "disponibilidades" },
+            ],
+          },
+        ],
+      });
+      return updatedUserProfile.toJSON(); // Devolvemos el objeto plano
+    } catch (error) {
+      console.error("Error al actualizar el perfil del usuario:", error);
+      if (
+        error.name === "SequelizeValidationError" ||
+        error.name === "SequelizeUniqueConstraintError"
+      ) {
+        const validationError = new Error(
+          error.errors.map((e) => e.message).join(", ")
+        );
+        validationError.statusCode = 400;
+        throw validationError;
+      }
+      const serviceError = new Error(
+        "Error al actualizar el perfil del usuario."
+      );
+      serviceError.statusCode = 500;
+      throw serviceError;
+    }
+  }
 }
 
 export default new AuthService();

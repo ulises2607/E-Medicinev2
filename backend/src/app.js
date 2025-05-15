@@ -2,9 +2,10 @@ import express from "express";
 import cors from "cors";
 import morgan from "morgan";
 import dotenv from "dotenv";
+import cookieParser from "cookie-parser";
 import authRoutes from "./routes/auth.routes.js";
 import userRoutes from "./routes/user.routes.js";
-import cookieParser from "cookie-parser";
+import doctorRoutes from "./routes/doctor.routes.js";
 
 // Cargar variables de entorno
 dotenv.config();
@@ -27,6 +28,7 @@ app.get("/", (req, res) => {
 // Importar y usar las rutas de los módulos.....
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/doctors", doctorRoutes);
 // Middleware para manejar errores (simple por ahora)
 app.use((err, req, res, next) => {
   console.error(err.stack);
