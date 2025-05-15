@@ -1,9 +1,10 @@
-// src/app.js
 import express from "express";
 import cors from "cors";
 import morgan from "morgan";
 import dotenv from "dotenv";
 import authRoutes from "./routes/auth.routes.js";
+import userRoutes from "./routes/user.routes.js";
+import cookieParser from "cookie-parser";
 
 // Cargar variables de entorno
 dotenv.config();
@@ -16,6 +17,7 @@ app.use(cors()); // Habilitar CORS para todas las rutas
 app.use(morgan("dev")); // Logging de peticiones HTTP en la consola (modo desarrollo)
 app.use(express.json()); // Para parsear cuerpos de petición JSON
 app.use(express.urlencoded({ extended: true })); // Para parsear cuerpos de petición URL-encoded
+app.use(cookieParser());
 
 // Ruta de prueba
 app.get("/", (req, res) => {
@@ -24,6 +26,7 @@ app.get("/", (req, res) => {
 
 // Importar y usar las rutas de los módulos.....
 app.use("/api/auth", authRoutes);
+app.use("/api/users", userRoutes);
 // Middleware para manejar errores (simple por ahora)
 app.use((err, req, res, next) => {
   console.error(err.stack);
