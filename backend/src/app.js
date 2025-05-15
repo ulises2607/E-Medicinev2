@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import morgan from "morgan";
 import dotenv from "dotenv";
+import authRoutes from "./routes/auth.routes.js";
 
 // Cargar variables de entorno
 dotenv.config();
@@ -22,7 +23,7 @@ app.get("/", (req, res) => {
 });
 
 // Importar y usar las rutas de los módulos.....
-
+app.use("/api/auth", authRoutes);
 // Middleware para manejar errores (simple por ahora)
 app.use((err, req, res, next) => {
   console.error(err.stack);

@@ -1,8 +1,9 @@
+// src/services/auth.service.js
 import bcrypt from "bcrypt";
-import db from "../daos/models";
-import { generateConfirmationString } from "../utils/generateId";
+import db from "../daos/models/index.js"; // Importa el objeto db con todos los modelos y sequelize
+// import { generateConfirmationString } from '../utils/generateId.js'; // Descomenta si lo usas
 
-// Funcion para hashear contraseñas
+// Función para hashear contraseñas
 const hashPassword = async (password) => {
   const saltRounds = 10;
   return bcrypt.hash(password, saltRounds);
@@ -15,57 +16,64 @@ class AuthService {
       password,
       firstName,
       lastName,
-      phone_number,
-      photo_url,
+      role,
+      phoneNumber,
+      photoUrl,
       gender,
       country,
       city,
       address,
-      postal_code,
-      date_of_birth,
-      role,
+      postalCode,
+      dateOfBirth,
+      // Campos específicos del rol
+      speciality, // Para doctores
+      consultationValue, // Para doctores
+      idDocumentType, // Para doctores
+      idDocumentNumber, // Para doctores
+      creditCardToken, // Para pacientes
     } = userData;
 
-    // Verificacion de existencia previa
+    // 1. Validar que el email no exista ya
     const existingUser = await db.Usuario.findOne({ where: { email } });
     if (existingUser) {
-      const error = new Error("El correo electronico ya esta registrado. ");
+      const error = new Error("El correo electrónico ya está registrado.");
       error.statusCode = 409; // Conflict
       throw error;
     }
 
-    // Hashear contraseña
+    // 2. Hashear la contraseña
     const hashedPassword = await hashPassword(password);
 
     let newUser;
     try {
+      // 3. Usar una transacción de Sequelize
       await db.sequelize.transaction(async (t) => {
-        // Crear el registro en la tabla 'usuarios'
         newUser = await db.Usuario.create(
           {
             email,
             password_hash: hashedPassword,
             first_name: firstName,
             last_name: lastName,
-            role: userData.role,
-            phone_number: userData.phoneNumber,
-            photo_url: userData.photoUrl,
-            gender: userData.gender,
-            country: userData.country,
-            city: userData.city,
-            address: userData.address,
-            postal_code: userData.postalCode,
-            date_of_birth: userData.dateOfBirth,
+            role,
+            phone_number: phoneNumber,
+            photo_url: photoUrl,
+            gender,
+            country,
+            city,
+            address,
+            postal_code: postalCode,
+            date_of_birth: dateOfBirth,
+            // confirmed: false, // Si usas confirmación de email
+            // confirmation_string: generateConfirmationString(), // Si usas confirmación de email
           },
           { transaction: t }
         );
 
-        // Crear el registro específico del rol
         if (role === "patient") {
           await db.Paciente.create(
             {
-              user_id: newUser.id, // La clave foránea es el id del usuario recién creado
-              // credit_card_token: userData.creditCardToken, // Si se proporciona
+              user_id: newUser.id,
+              credit_card_token: creditCardToken,
             },
             { transaction: t }
           );
@@ -73,44 +81,53 @@ class AuthService {
           await db.Doctor.create(
             {
               user_id: newUser.id,
-              speciality: speciality, // Asegúrate de que este dato llegue en userData
-              consultation_value: consultationValue, // Y este también
-              // ...otros campos específicos de doctor si los hay en el registro inicial
+              speciality: speciality,
+              consultation_value: consultationValue,
+              id_document_type: idDocumentType,
+              id_document_number: idDocumentNumber,
+              // availability_status se establecerá por defecto según el modelo
             },
             { transaction: t }
           );
         } else {
-          // Manejar roles no válidos
           const error = new Error("Rol de usuario no válido.");
           error.statusCode = 400;
-          throw error;
+          throw error; // Esto hará rollback de la transacción
         }
       });
 
-      // Si todo fue bien, newUser contiene la instancia del usuario creado
-      // Podríamos querer recargar el usuario con sus asociaciones para devolverlo completo
+      // Recargar el usuario con sus perfiles asociados para devolverlo
       const createdUserWithProfile = await db.Usuario.findByPk(newUser.id, {
         include: [
-          { model: db.Paciente, as: "pacienteInfo" },
-          { model: db.Doctor, as: "doctorInfo" },
+          { model: db.Paciente, as: "pacienteInfo" }, // Alias definido en index.js
+          { model: db.Doctor, as: "doctorInfo" }, // Alias definido en index.js
         ],
       });
 
-      // No devolvemos el hash de la contraseña
-      const { password_hash, ...userWithoutPassword } =
+      // Eliminar el hash de la contraseña de la respuesta
+      const { password_hash, ...userToReturn } =
         createdUserWithProfile.toJSON();
-      return userWithoutPassword;
+      return userToReturn;
     } catch (error) {
-      // Si el error ya tiene statusCode (lanzado por nosotros), lo relanzamos
+      console.error("Error durante el registro o la transacción:", error);
       if (error.statusCode) {
+        // Si es un error que ya hemos lanzado con statusCode
         throw error;
       }
-      // Si es un error de Sequelize (ej. validación del modelo) u otro error
-      console.error("Error en la transacción de registro:", error);
-      const serviceError = new Error("Error al registrar el usuario.");
-      serviceError.statusCode = 500; // Internal Server Error
-
+      // Para errores de validación de Sequelize u otros errores inesperados
+      const serviceError = new Error(
+        error.message || "Error al registrar el usuario."
+      );
+      serviceError.statusCode =
+        error.name === "SequelizeValidationError" ||
+        error.name === "SequelizeUniqueConstraintError"
+          ? 400
+          : 500;
       throw serviceError;
     }
   }
+
+  // async loginUser(email, password) { ... } (lo implementaremos después)
 }
+
+export default new AuthService();
