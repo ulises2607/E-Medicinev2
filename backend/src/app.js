@@ -16,7 +16,12 @@ dotenv.config();
 const app = express();
 
 // Middlewares
-app.use(cors()); // Habilitar CORS para todas las rutas
+app.use(
+  cors({
+    origin: "http://localhost:3000",
+    credentials: true,
+  })
+);
 app.use(morgan("dev")); // Logging de peticiones HTTP en la consola (modo desarrollo)
 app.use(express.json()); // Para parsear cuerpos de petición JSON
 app.use(express.urlencoded({ extended: true })); // Para parsear cuerpos de petición URL-encoded

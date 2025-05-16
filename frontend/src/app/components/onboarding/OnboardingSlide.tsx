@@ -1,13 +1,12 @@
 "use client";
 
 import React from "react";
-import Image, { StaticImageData } from "next/image"; // Para usar StaticImageData si importas imágenes directamente
+import Image, { StaticImageData } from "next/image";
 
 interface OnboardingSlideProps {
-  imageSrc: string | StaticImageData; // Puede ser una URL o una imagen importada
+  imageSrc: StaticImageData | string;
   imageAlt: string;
-  title: string; // El texto como "Consultas con especialistas..."
-  // Podríamos tener un título principal constante "Te damos la bienvenida a E-medicine" en el contenedor
+  title: string;
 }
 
 const OnboardingSlide: React.FC<OnboardingSlideProps> = ({
@@ -16,24 +15,21 @@ const OnboardingSlide: React.FC<OnboardingSlideProps> = ({
   title,
 }) => {
   return (
-    <div className="flex flex-col items-center text-center px-4 w-full max-w-md">
-      {" "}
-      {/* Limitar ancho máximo */}
-      {/* Contenedor de la imagen para mantener proporciones y tamaño */}
-      <div className="mb-6 md:mb-10 w-[280px] h-[280px] md:w-[320px] md:h-[320px] relative">
-        {" "}
-        {/* Tamaño específico */}
+    <div className="flex flex-col items-center text-center w-full max-w-xs sm:max-w-sm md:max-w-md">
+      {/* Imagen */}
+      <div className="w-[250px] h-[250px] sm:w-[300px] sm:h-[300px] md:w-[350px] md:h-[350px] relative mb-6 md:mb-8">
         <Image
-          src={imageSrc}
+          src={imageSrc} // Ahora imageSrc es el objeto importado
           alt={imageAlt}
           layout="fill"
-          objectFit="contain" // 'contain' suele ser mejor para ilustraciones para que se vean completas
-          priority={true} // Para la primera imagen del onboarding (LCP)
+          objectFit="contain" // Para asegurar que toda la ilustración sea visible
+          priority // Dar prioridad a la primera imagen del slide si es posible (o a la visible)
         />
       </div>
-      <p className="text-neutral-700 text-base md:text-lg leading-relaxed max-w-sm">
+      {/* Título/Descripción */}
+      <p className="text-sm sm:text-base text-gray-700 leading-relaxed px-4">
         {" "}
-        {/* max-w-sm para el texto */}
+        {/* Color de texto más suave y padding lateral */}
         {title}
       </p>
     </div>
