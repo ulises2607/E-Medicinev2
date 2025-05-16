@@ -6,6 +6,8 @@ import cookieParser from "cookie-parser";
 import authRoutes from "./routes/auth.routes.js";
 import userRoutes from "./routes/user.routes.js";
 import doctorRoutes from "./routes/doctor.routes.js";
+import citaRoutes from "./routes/cita.routes.js";
+import pacienteRoutes from "./routes/paciente.routes.js";
 
 // Cargar variables de entorno
 dotenv.config();
@@ -30,6 +32,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/doctors", doctorRoutes);
 app.use("/api/citas", citaRoutes);
+app.use("/api/pacientes", pacienteRoutes);
 // Middleware para manejar errores (simple por ahora)
 app.use((err, req, res, next) => {
   console.error(err.stack);
