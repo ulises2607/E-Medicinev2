@@ -5,6 +5,7 @@ class CitaController {
     try {
       const pacienteId = req.user.id; // El paciente logueado agenda la cita para sí mismo
       const citaData = req.body;
+      console.log("La cita a crear:  ", citaData);
 
       // Validaciones básicas en el controlador
       if (
@@ -13,12 +14,10 @@ class CitaController {
         !citaData.startTime ||
         !citaData.endTime
       ) {
-        return res
-          .status(400)
-          .json({
-            message:
-              "Faltan campos obligatorios: doctorId, appointmentDate, startTime, endTime.",
-          });
+        return res.status(400).json({
+          message:
+            "Faltan campos obligatorios: doctorId, appointmentDate, startTime, endTime.",
+        });
       }
       // Podrías añadir más validaciones de formato aquí si es necesario
 
@@ -37,7 +36,7 @@ class CitaController {
   async getMisCitasComoPaciente(req, res) {
     try {
       const pacienteId = req.user.id;
-      const queryParams = req.query; // Para filtros ?status=pending
+      const queryParams = req.query;
       const citas = await CitaService.getCitasPorPaciente(
         pacienteId,
         queryParams
@@ -80,11 +79,9 @@ class CitaController {
       res.status(200).json(cita);
     } catch (error) {
       console.error("Error en CitaController.getCitaDetallada:", error.message);
-      res
-        .status(error.statusCode || 500)
-        .json({
-          message: error.message || "Error al obtener el detalle de la cita.",
-        });
+      res.status(error.statusCode || 500).json({
+        message: error.message || "Error al obtener el detalle de la cita.",
+      });
     }
   }
 
@@ -107,22 +104,18 @@ class CitaController {
         userId,
         userRole
       );
-      res
-        .status(200)
-        .json({
-          message: "Estado de la cita actualizado.",
-          cita: citaActualizada,
-        });
+      res.status(200).json({
+        message: "Estado de la cita actualizado.",
+        cita: citaActualizada,
+      });
     } catch (error) {
       console.error(
         "Error en CitaController.actualizarEstadoCita:",
         error.message
       );
-      res
-        .status(error.statusCode || 500)
-        .json({
-          message: error.message || "Error al actualizar el estado de la cita.",
-        });
+      res.status(error.statusCode || 500).json({
+        message: error.message || "Error al actualizar el estado de la cita.",
+      });
     }
   }
 }

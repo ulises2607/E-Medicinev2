@@ -1,4 +1,3 @@
-// src/services/cita.service.js
 import { Op } from "sequelize";
 import db from "../daos/models/index.js";
 import {
@@ -259,104 +258,234 @@ class CitaService {
     }
   }
 
+  // Tu método getCitasPorDoctor se modificaría de forma similar para aceptar 'date' y múltiples 'status'
   async getCitasPorPaciente(pacienteId, queryParams) {
-    const { status, date_from, date_to } = queryParams;
+    const {
+      status, // Puede ser "pending,confirmed"
+      date, // Fecha específica "YYYY-MM-DD"
+      date_from,
+      date_to,
+      limit,
+      sort_by = "appointment_date", // Campo por defecto para ordenar
+      order = "ASC", // Dirección por defecto
+    } = queryParams;
+
+    console.log("Lo que llega de la peticion de cita: ", queryParams);
+
     const whereClause = { patient_user_id: pacienteId };
 
-    if (status) whereClause.status = status;
-    if (date_from)
-      whereClause.appointment_date = {
-        ...whereClause.appointment_date,
-        [Op.gte]: date_from,
-      };
-    if (date_to)
-      whereClause.appointment_date = {
-        ...whereClause.appointment_date,
-        [Op.lte]: date_to,
-      };
+    // Manejo del filtro de 'status' para múltiples valores
+    if (status) {
+      const statusArray = status
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => s && s !== "undefined" && s !== "null");
+      if (statusArray.length > 0) {
+        whereClause.status = { [Op.in]: statusArray };
+      }
+    }
+
+    // Manejo del filtro de 'date' (fecha específica)
+    // Si se proporciona 'date', tiene prioridad sobre 'date_from' y 'date_to'
+    if (date) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        // Validación simple de formato
+        const error = new Error(
+          'Formato de fecha inválido para el parámetro "date". Usar YYYY-MM-DD.'
+        );
+        error.statusCode = 400;
+        throw error;
+      }
+      whereClause.appointment_date = date;
+    } else {
+      // Manejo del rango de fechas si no se proporciona una fecha específica
+      if (date_from) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date_from)) {
+          const error = new Error(
+            'Formato de fecha inválido para "date_from". Usar YYYY-MM-DD.'
+          );
+          error.statusCode = 400;
+          throw error;
+        }
+        whereClause.appointment_date = {
+          ...(whereClause.appointment_date || {}),
+          [Op.gte]: date_from,
+        };
+      }
+      if (date_to) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date_to)) {
+          const error = new Error(
+            'Formato de fecha inválido para "date_to". Usar YYYY-MM-DD.'
+          );
+          error.statusCode = 400;
+          throw error;
+        }
+        whereClause.appointment_date = {
+          ...(whereClause.appointment_date || {}),
+          [Op.lte]: date_to,
+        };
+      }
+    }
+
+    const findOptions = {
+      where: whereClause,
+      include: [
+        {
+          model: db.Doctor,
+          as: "doctor", // Debe coincidir con el alias en models/index.js
+          include: [
+            {
+              model: db.Usuario,
+              as: "usuario", // Debe coincidir con el alias en models/index.js
+              attributes: [
+                "id",
+                "first_name",
+                "last_name",
+                "photo_url",
+                "email",
+              ],
+            },
+          ],
+        },
+        {
+          model: db.RegistroConsulta,
+          as: "registroConsulta", // Debe coincidir con el alias
+          required: false, // LEFT JOIN para no excluir citas sin registro aún
+        },
+      ],
+      order: [[sort_by, order.toUpperCase() === "DESC" ? "DESC" : "ASC"]],
+    };
+
+    if (limit) {
+      const parsedLimit = parseInt(limit, 10);
+      if (!isNaN(parsedLimit) && parsedLimit > 0) {
+        findOptions.limit = parsedLimit;
+      }
+    }
 
     try {
-      const citas = await db.Cita.findAll({
-        where: whereClause,
-        include: [
-          {
-            model: db.Doctor,
-            as: "doctor",
-            include: [
-              {
-                model: db.Usuario,
-                as: "usuario",
-                attributes: ["id", "first_name", "last_name", "photo_url"],
-              },
-            ],
-          },
-          {
-            model: db.RegistroConsulta, // Incluir el registro de la consulta si existe
-            as: "registroConsulta",
-          },
-        ],
-        order: [
-          ["appointment_date", "ASC"],
-          ["start_time", "ASC"],
-        ],
-      });
+      const citas = await db.Cita.findAll(findOptions);
       return citas.map((c) => c.toJSON());
     } catch (error) {
       console.error(
-        `Error al obtener las citas del paciente ${pacienteId}:`,
+        `Error al obtener las citas del paciente ${pacienteId} con filtros ${JSON.stringify(
+          queryParams
+        )}:`,
         error
       );
+      if (error.statusCode) throw error; // Si ya es un CustomError, relánzalo
       throw new Error("Error al obtener las citas del paciente.");
     }
   }
 
+  // Deberías aplicar una lógica similar a getCitasPorDoctor si también necesitas estos filtros allí
   async getCitasPorDoctor(doctorId, queryParams) {
-    const { status, date_from, date_to } = queryParams;
+    const {
+      status,
+      date,
+      date_from,
+      date_to,
+      limit,
+      sort_by = "appointment_date",
+      order = "ASC",
+    } = queryParams;
     const whereClause = { doctor_user_id: doctorId };
 
-    if (status) whereClause.status = status;
-    if (date_from)
-      whereClause.appointment_date = {
-        ...whereClause.appointment_date,
-        [Op.gte]: date_from,
-      };
-    if (date_to)
-      whereClause.appointment_date = {
-        ...whereClause.appointment_date,
-        [Op.lte]: date_to,
-      };
+    if (status) {
+      const statusArray = status
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => s && s !== "undefined" && s !== "null");
+      if (statusArray.length > 0) {
+        whereClause.status = { [Op.in]: statusArray };
+      }
+    }
+
+    if (date) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        const error = new Error(
+          'Formato de fecha inválido para "date". Usar YYYY-MM-DD.'
+        );
+        error.statusCode = 400;
+        throw error;
+      }
+      whereClause.appointment_date = date;
+    } else {
+      if (date_from) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date_from)) {
+          const error = new Error(
+            'Formato de fecha inválido para "date_from". Usar YYYY-MM-DD.'
+          );
+          error.statusCode = 400;
+          throw error;
+        }
+        whereClause.appointment_date = {
+          ...(whereClause.appointment_date || {}),
+          [Op.gte]: date_from,
+        };
+      }
+      if (date_to) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date_to)) {
+          const error = new Error(
+            'Formato de fecha inválido para "date_to". Usar YYYY-MM-DD.'
+          );
+          error.statusCode = 400;
+          throw error;
+        }
+        whereClause.appointment_date = {
+          ...(whereClause.appointment_date || {}),
+          [Op.lte]: date_to,
+        };
+      }
+    }
+
+    const findOptions = {
+      where: whereClause,
+      include: [
+        {
+          model: db.Paciente,
+          as: "paciente", // Debe coincidir con el alias
+          include: [
+            {
+              model: db.Usuario,
+              as: "usuario", // Debe coincidir con el alias
+              attributes: [
+                "id",
+                "first_name",
+                "last_name",
+                "photo_url",
+                "email",
+              ],
+            },
+          ],
+        },
+        {
+          model: db.RegistroConsulta,
+          as: "registroConsulta", // Debe coincidir con el alias
+          required: false,
+        },
+      ],
+      order: [[sort_by, order.toUpperCase() === "DESC" ? "DESC" : "ASC"]],
+    };
+
+    if (limit) {
+      const parsedLimit = parseInt(limit, 10);
+      if (!isNaN(parsedLimit) && parsedLimit > 0) {
+        findOptions.limit = parsedLimit;
+      }
+    }
 
     try {
-      const citas = await db.Cita.findAll({
-        where: whereClause,
-        include: [
-          {
-            model: db.Paciente,
-            as: "paciente",
-            include: [
-              {
-                model: db.Usuario,
-                as: "usuario",
-                attributes: ["id", "first_name", "last_name", "photo_url"],
-              },
-            ],
-          },
-          {
-            model: db.RegistroConsulta,
-            as: "registroConsulta",
-          },
-        ],
-        order: [
-          ["appointment_date", "ASC"],
-          ["start_time", "ASC"],
-        ],
-      });
+      const citas = await db.Cita.findAll(findOptions);
       return citas.map((c) => c.toJSON());
     } catch (error) {
       console.error(
-        `Error al obtener las citas del doctor ${doctorId}:`,
+        `Error al obtener las citas del doctor ${doctorId} con filtros ${JSON.stringify(
+          queryParams
+        )}:`,
         error
       );
+      if (error.statusCode) throw error;
       throw new Error("Error al obtener las citas del doctor.");
     }
   }
