@@ -12,20 +12,18 @@ router.get("/", DoctorController.getAllDoctors);
 // Ver el perfil de un doctor específico (público o para usuarios logueados)
 router.get("/:id", DoctorController.getDoctorProfileById);
 
-// Rutas para que un doctor gestione su propia información (requieren autenticación y rol 'doctor')
-// Ejemplo: Actualizar disponibilidad
-// router.put(
-//   "/me/disponibilidad",
-//   protect,
-//   authorize("doctor"),
-//   DoctorController.updateMyDisponibilidad
-// );
-// // Ejemplo: Añadir certificado
-// router.post(
-//   "/me/certificados",
-//   protect,
-//   authorize("doctor"),
-//   DoctorController.addMyCertificado
-// );
+// Disponibilidad
+router.get(
+  "/me/disponibilidad",
+  protect,
+  authorize("doctor"),
+  DoctorController.getMyDisponibilidad
+);
+router.put(
+  "/me/disponibilidad",
+  protect,
+  authorize("doctor"),
+  DoctorController.updateMyDisponibilidad
+);
 
 export default router;
