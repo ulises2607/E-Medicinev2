@@ -29,10 +29,11 @@ app.get("/", (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/doctors", doctorRoutes);
+app.use("/api/citas", citaRoutes);
 // Middleware para manejar errores (simple por ahora)
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).send({ error: "¡Algo salió mal!", details: err.message });
+  res.status(500).send({ error: "¡Algo malio sal", details: err.message });
 });
 
 export default app;
