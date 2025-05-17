@@ -7,7 +7,7 @@ import React, {
   ReactNode,
   useCallback,
 } from "react";
-import apiClient from "@/lib/axios"; // Ajusta la ruta si @/ no apunta a src/
+import apiClient from "@/lib/axios";
 import { useRouter } from "next/navigation";
 
 export interface User {

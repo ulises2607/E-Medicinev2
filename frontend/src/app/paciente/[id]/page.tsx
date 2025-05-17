@@ -1,4 +1,3 @@
-// src/app/paciente/[id]/page.tsx
 "use client";
 
 import React, { useEffect } from "react";
