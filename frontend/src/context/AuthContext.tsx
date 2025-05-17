@@ -46,7 +46,9 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   login: (email: string, pass: string) => Promise<User | null>;
-  register: (userData: any) => Promise<any>;
+  register: (
+    userData: any
+  ) => Promise<{ id: string | number; role: string } | any>; // La respuesta del backend es {id, role}
   logout: () => Promise<void>;
   fetchCurrentUser: () => Promise<User | null>;
 }
@@ -117,16 +119,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const register = async (userData: any): Promise<any> => {
-    console.log("AuthContext: Intentando register...");
-    setIsLoading(true);
+    console.log("AuthContext: Intentando register con datos:", userData);
+    setIsLoading(true); // Puedes quitar isLoading para register si no hay feedback visual inmediato
     try {
-      // backend en /api/auth/register devuelve { id: ..., rol: ... }
-      const response = await apiClient.post("/auth/register", userData);
+      // Tu backend en /api/auth/register devuelve { message: '...', user: {id, role, email ...} }
+      // o según tu auth.service.js, devolvía el usuario completo.
+      // Vamos a asumir que devuelve el usuario completo sin la contraseña.
+      const response = await apiClient.post<{ user: User; message: string }>(
+        "/auth/register",
+        userData
+      );
       console.log("AuthContext: Registro exitoso", response.data);
-      // El registro NO loguea al usuario según nuestro backend actual
-      // No llamamos a fetchCurrentUser ni a setUser aquí.
+      // NO establecemos el usuario aquí porque el registro no implica login automático.
       setIsLoading(false);
-      return response.data;
+      return response.data; // Devuelve { user: ..., message: ... }
     } catch (error: any) {
       console.error(
         "AuthContext: Error en register:",
