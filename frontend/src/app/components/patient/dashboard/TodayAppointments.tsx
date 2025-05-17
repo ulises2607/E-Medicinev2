@@ -69,9 +69,9 @@ const TodayAppointments: React.FC<TodayAppointmentsProps> = ({
       {/* Sección de "Citas del Día" */}
       {/* El título "Citas programadas para el día de hoy" puede ir aquí o ser implícito */}
       <div
-        className={`flex flex-col-reverse flex-row sm:flex-row justify-between items-start gap-4 p-4 bg-white rounded-xl shadow-lg`}
+        className={`flex w-full flex-row sm:flex-row justify-between items-center gap-4 p-4 bg-white rounded-xl shadow-lg`}
       >
-        <div className="flex-1 space-y-3">
+        <div className="flex-1 space-y-3 w-full">
           {" "}
           {/* Contenedor de la lista de citas y botón */}
           {isLoading && (
@@ -103,15 +103,15 @@ const TodayAppointments: React.FC<TodayAppointmentsProps> = ({
                   <p className="font-semibold text-sm text-[#35799F]">
                     {" "}
                     {/* Azul Oscuro */}
-                    Cita {cita.doctor?.speciality || "Especialidad"}{" "}
+                    Cita para {cita.doctor?.speciality || "Especialidad"}{" "}
                     {/* Acceder a la especialidad del doctor */}
                   </p>
                   <p className="text-xs text-gray-700">
-                    {cita.doctor?.usuario?.first_name || ""}{" "}
+                    Dr {cita.doctor?.usuario?.first_name || ""}{" "}
                     {cita.doctor?.usuario?.last_name || ""}
                   </p>
                   <p className="text-xs text-gray-500">
-                    Hora: {cita.start_time.substring(0, 5)}
+                    Horas: {cita.start_time.substring(0, 5)}
                   </p>{" "}
                   {/* Mostrar solo HH:MM */}
                   <Link

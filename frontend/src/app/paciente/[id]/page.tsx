@@ -13,7 +13,7 @@ import PatientHeader from "@/app/components/patient/dashboard/PatientHeader";
 import ImageCarousel from "@/app/components/ui/ImageCarousel";
 import TodayAppointments from "@/app/components/patient/dashboard/TodayAppointments";
 import { format } from "date-fns";
-// import LastConsultations from "@/components/paciente/dashboard/LastConsultations"; // Ajusta ruta
+import LastConsultations from "@/app/components/patient/dashboard/LastConsultations";
 // import NotiSalud from "@/components/paciente/dashboard/NotiSalud"; // Ajusta ruta
 // El Navbar inferior vendrá del layout que envuelve esta página
 
@@ -135,8 +135,8 @@ export default function PatientDashboardPage() {
       <div className="px-4 md:px-6 space-y-8">
         {" "}
         {/* Espacio entre secciones */}
-        <TodayAppointments pacienteId={user.id.toString()} fechaActual={date} />
-        {/* <LastConsultations pacienteId={user.id.toString()} /> */}
+        <TodayAppointments pacienteId={user.id.toString()} />
+        <LastConsultations pacienteId={user.id.toString()} />
         <NotiSalud />
       </div>
 
