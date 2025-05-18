@@ -120,9 +120,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const register = async (userData: any): Promise<any> => {
     console.log("AuthContext: Intentando register con datos:", userData);
-    setIsLoading(true); // Puedes quitar isLoading para register si no hay feedback visual inmediato
+    setIsLoading(true);
     try {
-      // Tu backend en /api/auth/register devuelve { message: '...', user: {id, role, email ...} }
+      // backend en /api/auth/register devuelve { message: '...', user: {id, role, email ...} }
       // o según tu auth.service.js, devolvía el usuario completo.
       // Vamos a asumir que devuelve el usuario completo sin la contraseña.
       const response = await apiClient.post<{ user: User; message: string }>(
@@ -132,6 +132,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       console.log("AuthContext: Registro exitoso", response.data);
       // NO establecemos el usuario aquí porque el registro no implica login automático.
       setIsLoading(false);
+      router.push("/auth/login");
       return response.data; // Devuelve { user: ..., message: ... }
     } catch (error: any) {
       console.error(

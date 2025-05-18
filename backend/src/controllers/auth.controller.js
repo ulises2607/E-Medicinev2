@@ -7,8 +7,8 @@ class AuthController {
       if (
         !userData.email ||
         !userData.password ||
-        !userData.firstName ||
-        !userData.lastName ||
+        !userData.first_name ||
+        !userData.last_name ||
         !userData.role
       ) {
         return res.status(400).json({
