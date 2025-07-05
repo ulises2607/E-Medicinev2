@@ -150,6 +150,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       await apiClient.post("/auth/logout");
       console.log("AuthContext: Logout exitoso en backend.");
+      router.push("/auth/login");
     } catch (error: any) {
       console.error(
         "AuthContext: Error en logout del backend:",

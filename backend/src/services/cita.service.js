@@ -378,7 +378,6 @@ class CitaService {
     }
   }
 
-  // Deberías aplicar una lógica similar a getCitasPorDoctor si también necesitas estos filtros allí
   async getCitasPorDoctor(doctorId, queryParams) {
     const {
       status,

@@ -20,10 +20,7 @@ export default function RootLayout({
       {/* Establece el idioma principal de tu aplicación */}
       <body className={`${inter.className} bg-gray-100`}>
         {/* Fondo base para toda la app */}
-        <AuthProvider>
-          {/* ENVUELVE TUS CHILDREN AQUÍ */}
-          {children}
-        </AuthProvider>
+        <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
   );
