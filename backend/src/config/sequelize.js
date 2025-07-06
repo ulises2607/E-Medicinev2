@@ -6,12 +6,12 @@ dotenv.config(); // Asegúrate que las variables de entorno estén cargadas
 // Configuración para Supabase PostgreSQL
 const sequelize = new Sequelize(process.env.DATABASE_URL, {
   dialect: "postgres",
-  logging: process.env.NODE_ENV === 'development' ? console.log : false,
+  logging: process.env.NODE_ENV === "development" ? console.log : false,
   dialectOptions: {
     ssl: {
       require: true,
-      rejectUnauthorized: false
-    }
+      rejectUnauthorized: false,
+    },
   },
   define: {
     timestamps: true,

@@ -1,12 +1,12 @@
-import sequelize from '../src/config/sequelize.js';
-import { DataTypes } from 'sequelize';
+import sequelize from "../src/config/sequelize.js";
+import { DataTypes } from "sequelize";
 
 async function createTables() {
   try {
-    console.log('🚀 Creando tablas en Supabase...');
-    
+    console.log("🚀 Creando tablas en Supabase...");
+
     // Crear tabla usuarios
-    await sequelize.getQueryInterface().createTable('usuarios', {
+    await sequelize.getQueryInterface().createTable("usuarios", {
       id: {
         type: DataTypes.INTEGER,
         autoIncrement: true,
@@ -39,7 +39,7 @@ async function createTables() {
         allowNull: true,
       },
       gender: {
-        type: DataTypes.ENUM('male', 'female', 'other'),
+        type: DataTypes.ENUM("male", "female", "other"),
         allowNull: true,
       },
       country: {
@@ -72,7 +72,7 @@ async function createTables() {
         allowNull: false,
       },
       role: {
-        type: DataTypes.ENUM('patient', 'doctor', 'admin'),
+        type: DataTypes.ENUM("patient", "doctor", "admin"),
         allowNull: false,
       },
       created_at: {
@@ -87,13 +87,12 @@ async function createTables() {
       },
     });
 
-    console.log('✅ Tabla usuarios creada exitosamente');
-    
-    console.log('🎉 ¡Todas las tablas fueron creadas exitosamente!');
-    console.log('💡 Puedes verificar en tu dashboard de Supabase');
-    
+    console.log("✅ Tabla usuarios creada exitosamente");
+
+    console.log("🎉 ¡Todas las tablas fueron creadas exitosamente!");
+    console.log("💡 Puedes verificar en tu dashboard de Supabase");
   } catch (error) {
-    console.error('❌ Error creando las tablas:', error);
+    console.error("❌ Error creando las tablas:", error);
   } finally {
     await sequelize.close();
   }

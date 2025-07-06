@@ -1,36 +1,36 @@
 // backend_nuevo/config/config.js
-import dotenv from 'dotenv';
+import dotenv from "dotenv";
 dotenv.config(); // Cargar variables de entorno
 
 export default {
   development: {
-    use_env_variable: 'DATABASE_URL',
+    use_env_variable: "DATABASE_URL",
     dialect: "postgres",
     dialectOptions: {
       ssl: {
         require: true,
-        rejectUnauthorized: false
-      }
+        rejectUnauthorized: false,
+      },
     },
   },
   test: {
-    use_env_variable: 'DATABASE_URL',
+    use_env_variable: "DATABASE_URL",
     dialect: "postgres",
     dialectOptions: {
       ssl: {
         require: true,
-        rejectUnauthorized: false
-      }
+        rejectUnauthorized: false,
+      },
     },
   },
   production: {
-    use_env_variable: 'DATABASE_URL',
+    use_env_variable: "DATABASE_URL",
     dialect: "postgres",
     dialectOptions: {
       ssl: {
         require: true,
-        rejectUnauthorized: false
-      }
+        rejectUnauthorized: false,
+      },
     },
   },
 };

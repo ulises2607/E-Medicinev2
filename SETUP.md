@@ -3,26 +3,30 @@
 ## 🚀 Configuración Rápida para Colaboradores
 
 ### Prerrequisitos
+
 - Node.js 16+ instalado
 - Git configurado
 - Cuenta en GitHub
 
 ### 1. Clonar el Repositorio
+
 ```bash
 git clone https://github.com/ulises2607/E-Medicinev2.git
 cd E-Medicinev2
 ```
 
 ### 2. Configurar Backend
+
 ```bash
 cd backend
 npm install
 ```
 
 Crear archivo `.env` en la carpeta `backend`:
+
 ```env
 # Variables del Servidor
-PORT=4700 
+PORT=4700
 
 # Variables de Base de Datos Supabase
 DATABASE_URL=postgresql://postgres:0kBK2OXuWcIWQ8qV@db.wsprrvlrokockqpboctg.supabase.co:5432/postgres
@@ -35,6 +39,7 @@ JWT_SECRET=24dbd26a7560edc655167ffd18a80e89e95c42bc4802f73bfbfa770b13e1d6b00d2b7
 ```
 
 ### 3. Configurar Frontend
+
 ```bash
 cd ../frontend
 npm install
@@ -43,30 +48,36 @@ npm install
 ### 4. Ejecutar el Proyecto
 
 #### Backend (Terminal 1):
+
 ```bash
 cd backend
 npm start
 ```
+
 Deberías ver: "Conexión a PostgreSQL establecida exitosamente con Sequelize."
 
 #### Frontend (Terminal 2):
+
 ```bash
 cd frontend
 npm run dev
 ```
 
 ### 5. URLs del Proyecto
+
 - **Frontend Local**: http://localhost:3000
 - **Backend Local**: http://localhost:4700
-- **Frontend Producción**: [URL de Vercel Frontend]
-- **Backend Producción**: [URL de Vercel Backend]
+- **Frontend Producción**: https://e-medicinev2.vercel.app/
+- **Backend Producción**: https://e-medicinev2-backend.vercel.app/
 
 ## 🗄️ Base de Datos
+
 - **Proveedor**: Supabase (PostgreSQL)
 - **Configuración**: Ya configurada y lista para usar
 - **Tablas**: Se crean automáticamente al iniciar el backend
 
 ## 📁 Estructura del Proyecto
+
 ```
 E-Medicinev2/
 ├── frontend/          # Next.js application
@@ -86,12 +97,14 @@ E-Medicinev2/
 ## 🛠️ Comandos Útiles
 
 ### Backend:
+
 ```bash
 npm start          # Iniciar servidor
 npm run dev        # Modo desarrollo con nodemon
 ```
 
 ### Frontend:
+
 ```bash
 npm run dev        # Servidor de desarrollo
 npm run build      # Build para producción
@@ -101,10 +114,12 @@ npm run start      # Servidor de producción
 ## 🚨 Troubleshooting
 
 ### Error de conexión a base de datos:
+
 - Verifica que el archivo `.env` tenga la `DATABASE_URL` correcta
 - Asegúrate de tener conexión a internet
 
 ### Puerto ya en uso:
+
 ```bash
 # Windows
 netstat -ano | findstr :4700
@@ -115,6 +130,7 @@ lsof -ti:4700 | xargs kill -9
 ```
 
 ### Dependencias:
+
 ```bash
 # Limpiar e instalar de nuevo
 rm -rf node_modules package-lock.json
@@ -122,7 +138,9 @@ npm install
 ```
 
 ## 📞 Contacto
+
 Si tienes problemas, contacta a Ulises.
 
 ---
-Última actualización: Enero 2025
+
+Última actualización: Julio 2025
