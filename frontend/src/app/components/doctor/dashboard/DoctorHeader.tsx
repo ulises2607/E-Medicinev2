@@ -3,7 +3,7 @@
 import React from "react";
 import Image from "next/image";
 import { User } from "@/context/AuthContext";
-import { BellIcon, Cog6ToothIcon } from "@heroicons/react/24/outline";
+import { BellIcon } from "@heroicons/react/24/outline";
 
 interface DoctorHeaderProps {
   user: User; // Asumimos que el usuario ya está cargado

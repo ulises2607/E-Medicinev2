@@ -1,0 +1,99 @@
+name: Verify authentication and appointments
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, "codex/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: emedicine_ci
+          POSTGRES_PASSWORD: disposable-ci-password
+          POSTGRES_DB: emedicine_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U emedicine_ci -d emedicine_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # These credentials belong only to the disposable service above.
+      DATABASE_URL: postgresql://emedicine_ci:disposable-ci-password@127.0.0.1:5432/emedicine_test
+      TEST_DATABASE_URL: postgresql://emedicine_ci:disposable-ci-password@127.0.0.1:5432/emedicine_test
+      DB_SSL: "false"
+      FRONTEND_URL: http://localhost:3000
+      API_URL: http://127.0.0.1:4700
+      E2E_BASE_URL: http://localhost:3000
+      APPOINTMENT_TIME_ZONE: America/Argentina/Buenos_Aires
+      NEXT_TELEMETRY_DISABLED: "1"
+      PORT: "4700"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      - name: Install backend dependencies
+        run: npm ci --prefix backend
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend
+      - name: Test backend against PostgreSQL
+        run: npm test --prefix backend
+      - name: Lint frontend
+        run: npm run lint --prefix frontend
+      - name: Build frontend
+        run: npm run build --prefix frontend
+      - name: Check frontend types
+        run: npm run typecheck --prefix frontend
+      - name: Install browser
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Prepare disposable database and session secret
+        run: |
+          node -e "require('node:fs').appendFileSync(process.env.GITHUB_ENV, 'JWT_SECRET=' + require('node:crypto').randomBytes(48).toString('hex') + '\n')"
+          npm run db:setup --prefix backend
+      - name: Run browser flows against the built application
+        shell: bash
+        run: |
+          NODE_ENV=test npm start --prefix backend > backend-ci.log 2>&1 &
+          backend_pid=$!
+          PORT=3000 npm start --prefix frontend > frontend-ci.log 2>&1 &
+          frontend_pid=$!
+          trap 'kill "$backend_pid" "$frontend_pid" 2>/dev/null || true' EXIT
+          curl --fail --silent --show-error --retry 30 --retry-connrefused --retry-delay 1 --retry-max-time 90 http://127.0.0.1:4700/api/config
+          curl --fail --silent --show-error --retry 30 --retry-connrefused --retry-delay 1 --retry-max-time 90 --output /dev/null http://localhost:3000/auth/login
+          curl --fail --silent --show-error http://localhost:3000/api/config
+          npm run test:e2e --prefix frontend
+      - name: Upload browser report and server logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: verification-report
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+            backend-ci.log
+            frontend-ci.log
+          if-no-files-found: ignore
+          retention-days: 7

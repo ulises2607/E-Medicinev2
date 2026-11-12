@@ -4,7 +4,7 @@
 import React from "react";
 import Image from "next/image";
 import { User } from "@/context/AuthContext"; // Importa la interfaz User
-import { HeartIcon, BellIcon } from "@heroicons/react/24/outline"; // Ejemplo de iconos de Heroicons
+import { BellIcon } from "@heroicons/react/24/outline"; // Ejemplo de iconos de Heroicons
 
 interface PatientHeaderProps {
   user: User | null;

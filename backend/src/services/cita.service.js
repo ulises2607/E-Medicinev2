@@ -1,627 +1,320 @@
 import { Op } from "sequelize";
 import db from "../daos/models/index.js";
+import { fail, positiveId } from "../utils/errors.js";
 import {
-  format,
-  parse,
-  getDay,
-  addMinutes,
-  isEqual,
-  isBefore,
-  isAfter,
-} from "date-fns"; // Necesitaremos date-fns
+  validDate,
+  minutes,
+  timeString,
+  dayOfWeek,
+  intervals,
+  isFuture,
+  nowLocal,
+  overlaps,
+  SLOT_MINUTES,
+  TIME_ZONE,
+} from "../utils/schedule.js";
 
-// Helper para obtener el nombre del día en inglés a partir de una fecha
-const getDayName = (date) => {
-  // getDay() devuelve 0 para Domingo, 1 para Lunes, etc.
-  const dayIndex = getDay(date);
-  const days = [
-    "Sunday",
-    "Monday",
-    "Tuesday",
-    "Wednesday",
-    "Thursday",
-    "Friday",
-    "Saturday",
-  ];
-  return days[dayIndex];
+const userAttributes = ["id", "first_name", "last_name"];
+const includes = [
+  {
+    model: db.Doctor,
+    as: "doctor",
+    attributes: ["user_id", "speciality"],
+    include: [{ model: db.Usuario, as: "usuario", attributes: userAttributes }],
+  },
+  {
+    model: db.Paciente,
+    as: "paciente",
+    attributes: ["user_id"],
+    include: [{ model: db.Usuario, as: "usuario", attributes: userAttributes }],
+  },
+];
+const active = { [Op.in]: ["pending", "confirmed"] };
+const canManage = (cita, userId, role) => {
+  if (
+    !(
+      (role === "patient" && cita.patient_user_id === userId) ||
+      (role === "doctor" && cita.doctor_user_id === userId)
+    )
+  )
+    fail(403, "No tenés acceso a este turno.");
 };
 
-class CitaService {
-  async agendarCita(pacienteId, citaData) {
-    const {
-      doctorId, // user_id del doctor
-      appointmentDate, // YYYY-MM-DD
-      startTime, // HH:MM (o HH:MM:SS)
-      endTime, // HH:MM (o HH:MM:SS)
-      reasonForConsultation,
-      // paymentStatus y stripeSessionId se manejarían después o por defecto
-    } = citaData;
-
-    // 1. Validaciones básicas de entrada
-    if (!doctorId || !appointmentDate || !startTime || !endTime) {
-      const error = new Error(
-        "Faltan campos obligatorios: doctorId, appointmentDate, startTime, endTime."
-      );
-      error.statusCode = 400;
-      throw error;
-    }
-
-    const appointmentDateObj = parse(appointmentDate, "yyyy-MM-dd", new Date());
-    const requestedStartTimeObj = parse(
-      `${appointmentDate} ${startTime}`,
-      "yyyy-MM-dd HH:mm:ss",
-      new Date()
-    );
-    const requestedEndTimeObj = parse(
-      `${appointmentDate} ${endTime}`,
-      "yyyy-MM-dd HH:mm:ss",
-      new Date()
-    );
-
-    if (
-      isBefore(requestedEndTimeObj, requestedStartTimeObj) ||
-      isEqual(requestedEndTimeObj, requestedStartTimeObj)
-    ) {
-      const error = new Error(
-        "La hora de fin debe ser posterior a la hora de inicio."
-      );
-      error.statusCode = 400;
-      throw error;
-    }
-
-    // TODO: Considerar la duración de la cita (ej. 30 min, 1 hora) en lugar de endTime si es fijo.
-    // Por ahora, asumimos que el frontend envía un endTime.
-
-    // 2. Verificar que el doctor exista y esté activo (si tienes un campo 'activo' en Doctor/Usuario)
-    const doctor = await db.Doctor.findByPk(doctorId, {
-      include: [{ model: db.Usuario, as: "usuario" }],
-    });
-    if (!doctor || !doctor.usuario) {
-      // Asumiendo que un doctor debe tener un usuario asociado
-      const error = new Error("Doctor no encontrado.");
-      error.statusCode = 404;
-      throw error;
-    }
-    if (
-      doctor.availability_status === "not_available" ||
-      doctor.usuario.confirmed === false
-    ) {
-      // Ejemplo
-      const error = new Error(
-        "El doctor no está disponible actualmente o no ha confirmado su cuenta."
-      );
-      error.statusCode = 400;
-      throw error;
-    }
-
-    // 3. Verificar la disponibilidad general del doctor para ese día de la semana y horario
-    const dayOfWeek = getDayName(appointmentDateObj); // 'Monday', 'Tuesday', etc.
-    const disponibilidadDoctor = await db.DisponibilidadDoctor.findOne({
-      where: {
-        doctor_user_id: doctorId,
-        day_of_week: dayOfWeek,
-      },
-    });
-
-    if (!disponibilidadDoctor) {
-      const error = new Error(
-        `El doctor no está disponible el día ${dayOfWeek}.`
-      );
-      error.statusCode = 400;
-      throw error;
-    }
-
-    // Convertir horas de string (HH:MM:SS) a objetos Date para comparación (solo parte de hora)
-    // Se usa una fecha base (hoy) solo para poder parsear la hora, no se usa la fecha en sí.
-    const todayStr = format(new Date(), "yyyy-MM-dd");
-    const reqStartTimeComparable = parse(
-      `${todayStr} ${startTime}`,
-      "yyyy-MM-dd HH:mm:ss",
-      new Date()
-    );
-    const reqEndTimeComparable = parse(
-      `${todayStr} ${endTime}`,
-      "yyyy-MM-dd HH:mm:ss",
-      new Date()
-    );
-
-    let slotDisponible = false;
-    if (
-      disponibilidadDoctor.start_time_morning &&
-      disponibilidadDoctor.end_time_morning
-    ) {
-      const dispoStartMorning = parse(
-        `${todayStr} ${disponibilidadDoctor.start_time_morning}`,
-        "yyyy-MM-dd HH:mm:ss",
-        new Date()
-      );
-      const dispoEndMorning = parse(
-        `${todayStr} ${disponibilidadDoctor.end_time_morning}`,
-        "yyyy-MM-dd HH:mm:ss",
-        new Date()
-      );
-      if (
-        (isEqual(reqStartTimeComparable, dispoStartMorning) ||
-          isAfter(reqStartTimeComparable, dispoStartMorning)) &&
-        (isEqual(reqEndTimeComparable, dispoEndMorning) ||
-          isBefore(reqEndTimeComparable, dispoEndMorning))
-      ) {
-        slotDisponible = true;
-      }
-    }
-
-    if (
-      !slotDisponible &&
-      disponibilidadDoctor.start_time_afternoon &&
-      disponibilidadDoctor.end_time_afternoon
-    ) {
-      const dispoStartAfternoon = parse(
-        `${todayStr} ${disponibilidadDoctor.start_time_afternoon}`,
-        "yyyy-MM-dd HH:mm:ss",
-        new Date()
-      );
-      const dispoEndAfternoon = parse(
-        `${todayStr} ${disponibilidadDoctor.end_time_afternoon}`,
-        "yyyy-MM-dd HH:mm:ss",
-        new Date()
-      );
-      if (
-        (isEqual(reqStartTimeComparable, dispoStartAfternoon) ||
-          isAfter(reqStartTimeComparable, dispoStartAfternoon)) &&
-        (isEqual(reqEndTimeComparable, dispoEndAfternoon) ||
-          isBefore(reqEndTimeComparable, dispoEndAfternoon))
-      ) {
-        slotDisponible = true;
-      }
-    }
-
-    if (!slotDisponible) {
-      const error = new Error(
-        `El horario solicitado (${startTime} - ${endTime}) no está dentro de la disponibilidad del doctor para ${dayOfWeek}.`
-      );
-      error.statusCode = 400;
-      throw error;
-    }
-
-    // 4. Verificar si ya existe una cita para ese doctor en ese rango de tiempo (evitar solapamientos)
-    const existingAppointment = await db.Cita.findOne({
-      where: {
-        doctor_user_id: doctorId,
-        appointment_date: appointmentDate,
-        status: { [Op.notIn]: ["canceled"] }, // No considerar citas canceladas
-        [Op.or]: [
-          // Nueva cita empieza durante una existente
-          {
-            start_time: { [Op.lt]: endTime },
-            end_time: { [Op.gt]: startTime },
-          },
-          // Nueva cita termina durante una existente (ya cubierto arriba)
-          // Nueva cita contiene completamente una existente
-          // { start_time: { [Op.gte]: startTime }, end_time: { [Op.lte]: endTime } } // No, esto es al revés
-        ],
-      },
-    });
-
-    if (existingAppointment) {
-      const error = new Error(
-        "El doctor ya tiene una cita agendada en el horario seleccionado."
-      );
-      error.statusCode = 409; // Conflict
-      throw error;
-    }
-
-    // 5. (Opcional) Verificar si el paciente ya tiene una cita en ese horario con otro doctor
-    const patientExistingAppointment = await db.Cita.findOne({
-      where: {
-        patient_user_id: pacienteId,
-        appointment_date: appointmentDate,
-        status: { [Op.notIn]: ["canceled"] },
-        [Op.or]: [
-          {
-            start_time: { [Op.lt]: endTime },
-            end_time: { [Op.gt]: startTime },
-          },
-        ],
-      },
-    });
-    if (patientExistingAppointment) {
-      const error = new Error(
-        "Ya tienes otra cita agendada en ese mismo horario."
-      );
-      error.statusCode = 409;
-      throw error;
-    }
-
-    // 6. Crear la cita
-    try {
-      const nuevaCita = await db.Cita.create({
-        patient_user_id: pacienteId,
-        doctor_user_id: doctorId,
-        appointment_date: appointmentDate,
-        start_time: startTime,
-        end_time: endTime,
-        reason_for_consultation: reasonForConsultation,
-        status: "pending", // O 'confirmed' si no hay un paso de confirmación por el doctor/pago
-        payment_status: "pending", // Asumimos pendiente hasta que se procese el pago
-      });
-      return nuevaCita.toJSON();
-    } catch (error) {
-      console.error("Error al crear la cita en la base de datos:", error);
-      if (error.name === "SequelizeValidationError") {
-        const validationError = new Error(
-          error.errors.map((e) => e.message).join(", ")
-        );
-        validationError.statusCode = 400;
-        throw validationError;
-      }
-      throw new Error("No se pudo agendar la cita.");
-    }
-  }
-
-  // Tu método getCitasPorDoctor se modificaría de forma similar para aceptar 'date' y múltiples 'status'
-  async getCitasPorPaciente(pacienteId, queryParams) {
-    const {
-      status, // Puede ser "pending,confirmed"
-      date, // Fecha específica "YYYY-MM-DD"
-      date_from,
-      date_to,
-      limit,
-      sort_by = "appointment_date", // Campo por defecto para ordenar
-      order = "ASC", // Dirección por defecto
-    } = queryParams;
-
-    console.log("Lo que llega de la peticion de cita: ", queryParams);
-
-    const whereClause = { patient_user_id: pacienteId };
-
-    // Manejo del filtro de 'status' para múltiples valores
-    if (status) {
-      const statusArray = status
-        .split(",")
-        .map((s) => s.trim())
-        .filter((s) => s && s !== "undefined" && s !== "null");
-      if (statusArray.length > 0) {
-        whereClause.status = { [Op.in]: statusArray };
-      }
-    }
-
-    // Manejo del filtro de 'date' (fecha específica)
-    // Si se proporciona 'date', tiene prioridad sobre 'date_from' y 'date_to'
-    if (date) {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-        // Validación simple de formato
-        const error = new Error(
-          'Formato de fecha inválido para el parámetro "date". Usar YYYY-MM-DD.'
-        );
-        error.statusCode = 400;
-        throw error;
-      }
-      whereClause.appointment_date = date;
-    } else {
-      // Manejo del rango de fechas si no se proporciona una fecha específica
-      if (date_from) {
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(date_from)) {
-          const error = new Error(
-            'Formato de fecha inválido para "date_from". Usar YYYY-MM-DD.'
-          );
-          error.statusCode = 400;
-          throw error;
-        }
-        whereClause.appointment_date = {
-          ...(whereClause.appointment_date || {}),
-          [Op.gte]: date_from,
-        };
-      }
-      if (date_to) {
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(date_to)) {
-          const error = new Error(
-            'Formato de fecha inválido para "date_to". Usar YYYY-MM-DD.'
-          );
-          error.statusCode = 400;
-          throw error;
-        }
-        whereClause.appointment_date = {
-          ...(whereClause.appointment_date || {}),
-          [Op.lte]: date_to,
-        };
-      }
-    }
-
-    const findOptions = {
-      where: whereClause,
-      include: [
-        {
-          model: db.Doctor,
-          as: "doctor", // Debe coincidir con el alias en models/index.js
-          include: [
-            {
-              model: db.Usuario,
-              as: "usuario", // Debe coincidir con el alias en models/index.js
-              attributes: [
-                "id",
-                "first_name",
-                "last_name",
-                "photo_url",
-                "email",
-              ],
-            },
-          ],
-        },
-        {
-          model: db.RegistroConsulta,
-          as: "registroConsulta", // Debe coincidir con el alias
-          required: false, // LEFT JOIN para no excluir citas sin registro aún
-        },
+// Every booking, reschedule and availability edit takes these same row locks.
+// This serializes competing reservations across API instances, including a patient's other doctors.
+export async function lockUsers(ids, transaction) {
+  await db.Usuario.findAll({
+    where: { id: { [Op.in]: [...new Set(ids)].sort((a, b) => a - b) } },
+    attributes: ["id"],
+    order: [["id", "ASC"]],
+    transaction,
+    lock: transaction.LOCK.UPDATE,
+  });
+}
+async function busyAppointments(
+  doctorId,
+  patientId,
+  date,
+  transaction,
+  excludeId,
+) {
+  return db.Cita.findAll({
+    where: {
+      appointment_date: date,
+      status: { [Op.ne]: "canceled" },
+      [Op.or]: [
+        { doctor_user_id: doctorId },
+        ...(patientId ? [{ patient_user_id: patientId }] : []),
       ],
-      order: [[sort_by, order.toUpperCase() === "DESC" ? "DESC" : "ASC"]],
-    };
-
-    if (limit) {
-      const parsedLimit = parseInt(limit, 10);
-      if (!isNaN(parsedLimit) && parsedLimit > 0) {
-        findOptions.limit = parsedLimit;
-      }
-    }
-
-    try {
-      const citas = await db.Cita.findAll(findOptions);
-      return citas.map((c) => c.toJSON());
-    } catch (error) {
-      console.error(
-        `Error al obtener las citas del paciente ${pacienteId} con filtros ${JSON.stringify(
-          queryParams
-        )}:`,
-        error
-      );
-      if (error.statusCode) throw error; // Si ya es un CustomError, relánzalo
-      throw new Error("Error al obtener las citas del paciente.");
-    }
-  }
-
-  async getCitasPorDoctor(doctorId, queryParams) {
-    const {
-      status,
-      date,
-      date_from,
-      date_to,
-      limit,
-      sort_by = "appointment_date",
-      order = "ASC",
-    } = queryParams;
-    const whereClause = { doctor_user_id: doctorId };
-
-    if (status) {
-      const statusArray = status
-        .split(",")
-        .map((s) => s.trim())
-        .filter((s) => s && s !== "undefined" && s !== "null");
-      if (statusArray.length > 0) {
-        whereClause.status = { [Op.in]: statusArray };
-      }
-    }
-
-    if (date) {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-        const error = new Error(
-          'Formato de fecha inválido para "date". Usar YYYY-MM-DD.'
-        );
-        error.statusCode = 400;
-        throw error;
-      }
-      whereClause.appointment_date = date;
-    } else {
-      if (date_from) {
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(date_from)) {
-          const error = new Error(
-            'Formato de fecha inválido para "date_from". Usar YYYY-MM-DD.'
-          );
-          error.statusCode = 400;
-          throw error;
-        }
-        whereClause.appointment_date = {
-          ...(whereClause.appointment_date || {}),
-          [Op.gte]: date_from,
-        };
-      }
-      if (date_to) {
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(date_to)) {
-          const error = new Error(
-            'Formato de fecha inválido para "date_to". Usar YYYY-MM-DD.'
-          );
-          error.statusCode = 400;
-          throw error;
-        }
-        whereClause.appointment_date = {
-          ...(whereClause.appointment_date || {}),
-          [Op.lte]: date_to,
-        };
-      }
-    }
-
-    const findOptions = {
-      where: whereClause,
-      include: [
-        {
-          model: db.Paciente,
-          as: "paciente", // Debe coincidir con el alias
-          include: [
-            {
-              model: db.Usuario,
-              as: "usuario", // Debe coincidir con el alias
-              attributes: [
-                "id",
-                "first_name",
-                "last_name",
-                "photo_url",
-                "email",
-              ],
-            },
-          ],
-        },
-        {
-          model: db.RegistroConsulta,
-          as: "registroConsulta", // Debe coincidir con el alias
-          required: false,
-        },
-      ],
-      order: [[sort_by, order.toUpperCase() === "DESC" ? "DESC" : "ASC"]],
-    };
-
-    if (limit) {
-      const parsedLimit = parseInt(limit, 10);
-      if (!isNaN(parsedLimit) && parsedLimit > 0) {
-        findOptions.limit = parsedLimit;
-      }
-    }
-
-    try {
-      const citas = await db.Cita.findAll(findOptions);
-      return citas.map((c) => c.toJSON());
-    } catch (error) {
-      console.error(
-        `Error al obtener las citas del doctor ${doctorId} con filtros ${JSON.stringify(
-          queryParams
-        )}:`,
-        error
-      );
-      if (error.statusCode) throw error;
-      throw new Error("Error al obtener las citas del doctor.");
-    }
-  }
-
-  async getCitaById(citaId, userId, userRole) {
-    try {
-      const cita = await db.Cita.findByPk(citaId, {
-        include: [
-          {
-            model: db.Doctor,
-            as: "doctor",
-            include: [
-              {
-                model: db.Usuario,
-                as: "usuario",
-                attributes: [
-                  "id",
-                  "first_name",
-                  "last_name",
-                  "photo_url",
-                  "email",
-                ],
-              },
-            ],
-          },
-          {
-            model: db.Paciente,
-            as: "paciente",
-            include: [
-              {
-                model: db.Usuario,
-                as: "usuario",
-                attributes: [
-                  "id",
-                  "first_name",
-                  "last_name",
-                  "photo_url",
-                  "email",
-                ],
-              },
-            ],
-          },
-          { model: db.RegistroConsulta, as: "registroConsulta" },
-        ],
-      });
-
-      if (!cita) {
-        const error = new Error("Cita no encontrada.");
-        error.statusCode = 404;
-        throw error;
-      }
-
-      // Verificar permisos: solo el paciente de la cita, el doctor de la cita o un admin pueden verla
-      if (
-        userRole !== "admin" &&
-        cita.patient_user_id !== userId &&
-        cita.doctor_user_id !== userId
-      ) {
-        const error = new Error("No tienes permiso para ver esta cita.");
-        error.statusCode = 403; // Forbidden
-        throw error;
-      }
-
-      return cita.toJSON();
-    } catch (error) {
-      console.error(`Error al obtener la cita ${citaId}:`, error);
-      if (error.statusCode) throw error;
-      throw new Error("Error al obtener la cita.");
-    }
-  }
-
-  async updateStatusCita(citaId, newStatus, userId, userRole) {
-    // userId y userRole son para verificar permisos
-    // newStatus podría ser 'confirmed', 'canceled', 'completed'
-    const allowedStatusUpdates = {
-      patient: ["canceled"],
-      doctor: ["confirmed", "canceled", "completed"],
-      admin: ["pending", "confirmed", "canceled", "completed"], // Admin puede cambiar a cualquier estado
-    };
-
-    if (
-      !allowedStatusUpdates[userRole] ||
-      !allowedStatusUpdates[userRole].includes(newStatus)
-    ) {
-      const error = new Error(
-        `El rol '${userRole}' no puede cambiar el estado de la cita a '${newStatus}'.`
-      );
-      error.statusCode = 403;
-      throw error;
-    }
-
-    try {
-      const cita = await db.Cita.findByPk(citaId);
-      if (!cita) {
-        const error = new Error("Cita no encontrada.");
-        error.statusCode = 404;
-        throw error;
-      }
-
-      // Lógica de permisos específica
-      if (userRole === "patient" && cita.patient_user_id !== userId) {
-        const error = new Error("No puedes modificar una cita que no es tuya.");
-        error.statusCode = 403;
-        throw error;
-      }
-      if (userRole === "doctor" && cita.doctor_user_id !== userId) {
-        const error = new Error("No puedes modificar una cita que no es tuya.");
-        error.statusCode = 403;
-        throw error;
-      }
-
-      // Lógica de transición de estados (ej. no se puede cancelar una cita completada)
-      if (cita.status === "completed" && newStatus === "canceled") {
-        const error = new Error(
-          "No se puede cancelar una cita que ya fue completada."
-        );
-        error.statusCode = 400;
-        throw error;
-      }
-      // ... más reglas de negocio sobre transiciones de estado ...
-
-      cita.status = newStatus;
-      // Si se cancela, podrías querer añadir una nota o razón de cancelación
-      // if (newStatus === 'canceled' && cancellationReason) {
-      //     cita.doctor_notes = cita.doctor_notes ? `${cita.doctor_notes}\nCancelada: ${cancellationReason}` : `Cancelada: ${cancellationReason}`;
-      // }
-      await cita.save();
-      return cita.toJSON();
-    } catch (error) {
-      console.error(
-        `Error al actualizar el estado de la cita ${citaId}:`,
-        error
-      );
-      if (error.statusCode) throw error;
-      throw new Error("Error al actualizar el estado de la cita.");
-    }
-  }
+      ...(excludeId ? { id: { [Op.ne]: excludeId } } : {}),
+    },
+    transaction,
+  });
+}
+async function scheduleFor(doctorId, date, transaction) {
+  const doctor = await db.Doctor.findByPk(doctorId, { transaction });
+  if (!doctor) fail(404, "Profesional no encontrado.");
+  if (doctor.availability_status !== "available")
+    fail(409, "Este profesional no acepta nuevos turnos.");
+  return db.DisponibilidadDoctor.findOne({
+    where: { doctor_user_id: doctorId, day_of_week: dayOfWeek(date) },
+    transaction,
+  });
+}
+async function validateSlot(doctorId, patientId, data, transaction, excludeId) {
+  const date = validDate(data.appointmentDate);
+  const start = minutes(data.startTime),
+    end = data.endTime ? minutes(data.endTime) : start + SLOT_MINUTES;
+  if (end - start !== SLOT_MINUTES || end >= 1440)
+    fail(400, "Los turnos duran 30 minutos y deben finalizar en el mismo día.");
+  if (!isFuture(date, timeString(start))) fail(400, "Elegí un horario futuro.");
+  const schedule = await scheduleFor(doctorId, date, transaction);
+  if (
+    !intervals(schedule).some(
+      ([from, to]) =>
+        start >= from && end <= to && (start - from) % SLOT_MINUTES === 0,
+    )
+  )
+    fail(409, "El horario no está disponible en la agenda del profesional.");
+  const busy = await busyAppointments(
+    doctorId,
+    patientId,
+    date,
+    transaction,
+    excludeId,
+  );
+  if (busy.some((c) => overlaps(start, end, c.start_time, c.end_time)))
+    fail(
+      409,
+      "El horario ya está ocupado por un turno tuyo o del profesional. Elegí otro.",
+    );
+  return {
+    appointment_date: date,
+    start_time: timeString(start),
+    end_time: timeString(end),
+  };
 }
 
+class CitaService {
+  async getSlots(doctorId, date, user, excludeId) {
+    doctorId = positiveId(doctorId);
+    date = validDate(date);
+    let patientId = user.role === "patient" ? user.id : null;
+    if (excludeId) {
+      const appointment = await this.getCitaById(excludeId, user.id, user.role);
+      if (appointment.doctor_user_id !== doctorId)
+        fail(400, "El profesional no coincide con el turno.");
+      patientId = appointment.patient_user_id;
+      excludeId = appointment.id;
+    }
+    const schedule = await scheduleFor(doctorId, date);
+    const busy = await busyAppointments(
+      doctorId,
+      patientId,
+      date,
+      undefined,
+      excludeId,
+    );
+    const slots = [];
+    for (const [from, to] of intervals(schedule)) {
+      for (
+        let start = from;
+        start + SLOT_MINUTES <= to;
+        start += SLOT_MINUTES
+      ) {
+        const end = start + SLOT_MINUTES;
+        if (
+          isFuture(date, timeString(start)) &&
+          !busy.some((c) => overlaps(start, end, c.start_time, c.end_time))
+        ) {
+          slots.push({
+            startTime: timeString(start),
+            endTime: timeString(end),
+          });
+        }
+      }
+    }
+    return { date, timeZone: TIME_ZONE, slotMinutes: SLOT_MINUTES, slots };
+  }
+
+  async agendarCita(patientId, data) {
+    const doctorId = positiveId(data.doctorId);
+    const reason = data.reasonForConsultation;
+    if (
+      typeof reason !== "string" ||
+      reason.trim().length < 3 ||
+      reason.trim().length > 1000
+    )
+      fail(400, "El motivo debe tener entre 3 y 1000 caracteres.");
+    const id = await db.sequelize.transaction(async (transaction) => {
+      await lockUsers([doctorId, patientId], transaction);
+      const slot = await validateSlot(doctorId, patientId, data, transaction);
+      const cita = await db.Cita.create(
+        {
+          ...slot,
+          patient_user_id: patientId,
+          doctor_user_id: doctorId,
+          reason_for_consultation: reason.trim(),
+          status: "pending",
+          payment_status: "pending",
+        },
+        { transaction },
+      );
+      return cita.id;
+    });
+    return this.getCitaById(id, patientId, "patient");
+  }
+
+  async listFor(userId, role, query = {}) {
+    const where = {
+      [role === "patient" ? "patient_user_id" : "doctor_user_id"]: userId,
+    };
+    if (query.status) {
+      if (typeof query.status !== "string")
+        fail(400, "Filtro de estado inválido.");
+      const status = query.status.split(",");
+      if (
+        status.some(
+          (s) => !["pending", "confirmed", "completed", "canceled"].includes(s),
+        )
+      )
+        fail(400, "Estado inválido.");
+      where.status = { [Op.in]: status };
+    }
+    if (query.date) where.appointment_date = validDate(query.date);
+    else if (query.date_from || query.date_to) {
+      where.appointment_date = {
+        ...(query.date_from ? { [Op.gte]: validDate(query.date_from) } : {}),
+        ...(query.date_to ? { [Op.lte]: validDate(query.date_to) } : {}),
+      };
+      if (query.date_from && query.date_to && query.date_from > query.date_to)
+        fail(400, "El rango de fechas es inválido.");
+    }
+    const sortBy = query.sort_by || "appointment_date";
+    if (!["appointment_date", "start_time", "id"].includes(sortBy))
+      fail(400, "Orden inválido.");
+    const order = query.order === "DESC" ? "DESC" : "ASC";
+    const limit = query.limit ? positiveId(query.limit) : 200;
+    if (limit > 500) fail(400, "El límite máximo es 500.");
+    return db.Cita.findAll({
+      where,
+      include: includes,
+      order: [
+        [sortBy, order],
+        ["start_time", order],
+        ["id", order],
+      ],
+      limit,
+    });
+  }
+  getCitasPorPaciente(id, query) {
+    return this.listFor(id, "patient", query);
+  }
+  getCitasPorDoctor(id, query) {
+    return this.listFor(id, "doctor", query);
+  }
+
+  async getCitaById(id, userId, role) {
+    const cita = await db.Cita.findByPk(positiveId(id), { include: includes });
+    if (!cita) fail(404, "Turno no encontrado.");
+    canManage(cita, userId, role);
+    return cita.toJSON();
+  }
+
+  async updateStatusCita(id, status, userId, role) {
+    const current = await this.getCitaById(id, userId, role);
+    const allowed =
+      role === "patient"
+        ? ["canceled"]
+        : ["confirmed", "canceled", "completed"];
+    if (!allowed.includes(status)) fail(403, "Tu rol no permite esta acción.");
+    await db.sequelize.transaction(async (transaction) => {
+      await lockUsers(
+        [current.doctor_user_id, current.patient_user_id],
+        transaction,
+      );
+      const cita = await db.Cita.findByPk(current.id, {
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+      const transitions = {
+        pending: ["confirmed", "canceled"],
+        confirmed: ["canceled", "completed"],
+        completed: [],
+        canceled: [],
+      };
+      if (!transitions[cita.status].includes(status))
+        fail(
+          409,
+          "El turno cambió o esta transición ya no está permitida. Actualizá la agenda.",
+        );
+      if (
+        status === "completed" &&
+        isFuture(cita.appointment_date, cita.start_time)
+      )
+        fail(
+          400,
+          "Podés marcar la consulta como atendida a partir de su horario de inicio.",
+        );
+      await cita.update({ status }, { transaction });
+    });
+    return this.getCitaById(id, userId, role);
+  }
+
+  async reschedule(id, data, userId, role) {
+    const current = await this.getCitaById(id, userId, role);
+    await db.sequelize.transaction(async (transaction) => {
+      await lockUsers(
+        [current.doctor_user_id, current.patient_user_id],
+        transaction,
+      );
+      const cita = await db.Cita.findByPk(current.id, {
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+      if (
+        !["pending", "confirmed"].includes(cita.status) ||
+        !isFuture(cita.appointment_date, cita.start_time)
+      )
+        fail(
+          409,
+          "Sólo se pueden reprogramar turnos pendientes o confirmados que aún no empezaron.",
+        );
+      const slot = await validateSlot(
+        cita.doctor_user_id,
+        cita.patient_user_id,
+        data,
+        transaction,
+        cita.id,
+      );
+      if (
+        slot.appointment_date === cita.appointment_date &&
+        slot.start_time === cita.start_time.slice(0, 5)
+      )
+        fail(400, "Elegí un horario diferente.");
+      await cita.update({ ...slot, status: "pending" }, { transaction });
+    });
+    return this.getCitaById(id, userId, role);
+  }
+}
 export default new CitaService();

@@ -2,7 +2,7 @@
 import React from "react";
 
 interface Props {
-  calendar: any; // Debería ser string[]: [DIA_SEMANA, '', MES, DIA_NUM, '', AÑO]
+  calendar: string[];
   twClass?: string;
   sizeCalendar?: string;
   sizeDate?: string;

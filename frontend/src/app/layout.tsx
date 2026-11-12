@@ -1,25 +1,16 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
-
-const inter = Inter({ subsets: ["latin"] });
-
 export const metadata: Metadata = {
-  title: "E-medicine",
-  description: "Tu plataforma de telemedicina.",
+  title: "E-medicine | Turnos médicos",
+  description: "Reservá y gestioná tus turnos médicos.",
 };
-
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="es">
-      {/* Establece el idioma principal de tu aplicación */}
-      <body className={`${inter.className} bg-gray-100`}>
-        {/* Fondo base para toda la app */}
+      <body>
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>

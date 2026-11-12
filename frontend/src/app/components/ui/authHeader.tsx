@@ -1,4 +1,4 @@
-import BallBackground from "@/components/ui/ballBackground";
+import BallBackground from "@/app/components/ui/BallBackgound";
 import Image from "next/image";
 import React from "react";
 

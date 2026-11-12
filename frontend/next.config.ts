@@ -1,14 +1,11 @@
 import type { NextConfig } from "next";
-
-const nextConfig = {
-  eslint: {
-    // Ignorar errores de ESLint durante el build
-    ignoreDuringBuilds: true,
-  },
-  typescript: {
-    // Ignorar errores de TypeScript durante el build
-    ignoreBuildErrors: true,
+const apiUrl = (process.env.API_URL || "http://localhost:4700").replace(
+  /\/$/,
+  "",
+);
+const nextConfig: NextConfig = {
+  async rewrites() {
+    return [{ source: "/api/:path*", destination: apiUrl + "/api/:path*" }];
   },
 };
-
 export default nextConfig;
