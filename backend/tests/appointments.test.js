@@ -438,3 +438,54 @@ test("expired or forged sessions cannot access protected data", async () => {
     assert.equal(result.status, 401);
   }
 });
+
+test("dashboard counts all history and returns only the next five owned active turns", async () => {
+  const doctor = await account("doctor", "ResumenDoctor");
+  const patient = await account("patient", "ResumenPaciente");
+  const base = {
+    doctor_user_id: doctor.id,
+    patient_user_id: patient.id,
+    appointment_date: shiftDate(-1),
+    start_time: "09:00",
+    end_time: "09:30",
+  };
+  await db.Cita.bulkCreate([
+    ...Array.from({ length: 201 }, (_, i) => ({
+      ...base, appointment_date: shiftDate(-i - 1), status: "completed",
+    })),
+    ...Array.from({ length: 3 }, () => ({ ...base, status: "canceled" })),
+    ...Array.from({ length: 2 }, () => ({ ...base, status: "pending" })),
+  ]);
+  // Insert in reverse order to ensure the summary sorts by appointment time.
+  const future = await db.Cita.bulkCreate(
+    Array.from({ length: 7 }, (_, i) => ({
+      ...base, appointment_date: shiftDate(7 - i), status: "pending",
+    })),
+  );
+  await db.Cita.create({ ...base, appointment_date: shiftDate(8), status: "confirmed" });
+  const onlyDoctor = await db.Cita.create({
+    ...base, patient_user_id: actors.patient.id,
+    appointment_date: shiftDate(1), start_time: "08:00", end_time: "08:30", status: "confirmed",
+  });
+  const onlyPatient = await db.Cita.create({
+    ...base, doctor_user_id: actors.doctor.id,
+    appointment_date: shiftDate(1), start_time: "07:00", end_time: "07:30", status: "pending",
+  });
+  await db.Cita.create({
+    ...base, doctor_user_id: actors.doctor.id, patient_user_id: actors.patient.id,
+    appointment_date: shiftDate(1), start_time: "06:00", end_time: "06:30", status: "pending",
+  });
+
+  assert.equal((await request(app).get("/api/citas/resumen")).status, 401);
+  const expectedShared = [...future].reverse().slice(0, 4).map((c) => c.id);
+  for (const [actor, firstTurn, counts] of [
+    [doctor, onlyDoctor, { pending: 9, confirmed: 2, completed: 201, canceled: 3 }],
+    [patient, onlyPatient, { pending: 10, confirmed: 1, completed: 201, canceled: 3 }],
+  ]) {
+    const response = await actor.agent.get("/api/citas/resumen").query({ userId: actors.doctor.id });
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+    assert.deepEqual(response.body.counts, counts);
+    assert.deepEqual(response.body.upcoming.map((c) => c.id), [firstTurn.id, ...expectedShared]);
+    assert.ok(response.body.upcoming.every((c) => c.appointment_date > shiftDate(0)));
+  }
+});

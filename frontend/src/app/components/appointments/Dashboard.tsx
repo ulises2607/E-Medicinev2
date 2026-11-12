@@ -4,19 +4,21 @@ import Link from "next/link";
 import { dashboardPath, useAuth } from "@/context/AuthContext";
 import { fetcher } from "@/lib/fetcher";
 import { errorMessage } from "@/lib/axios";
-import type { Appointment } from "@/app/types";
+import type { Appointment, AppointmentStatus } from "@/app/types";
 import { dateLabel, statusLabels } from "@/lib/appointments";
+interface DashboardSummary {
+  counts: Record<AppointmentStatus, number>;
+  upcoming: Appointment[];
+}
 export default function Dashboard() {
   const { user } = useAuth();
   const home = dashboardPath(user!);
   const isDoctor = user!.role === "doctor";
-  const { data, error, isLoading, mutate } = useSWR<Appointment[]>(
-    "/citas/" + (isDoctor ? "doctor" : "paciente") + "/me",
+  const { data, error, isLoading, mutate } = useSWR<DashboardSummary>(
+    "/citas/resumen",
     fetcher,
   );
-  const open =
-    data?.filter((c) => c.status === "pending" || c.status === "confirmed") ??
-    [];
+  const upcoming = data?.upcoming ?? [];
   return (
     <>
       <div className="page-heading">
@@ -49,7 +51,7 @@ export default function Dashboard() {
           <strong>
             {isLoading || error
               ? "—"
-              : (data?.filter((c) => c.status === "pending").length ?? 0)}
+              : (data?.counts.pending ?? 0)}
           </strong>
           <span>Pendientes</span>
         </div>
@@ -57,7 +59,7 @@ export default function Dashboard() {
           <strong>
             {isLoading || error
               ? "—"
-              : (data?.filter((c) => c.status === "confirmed").length ?? 0)}
+              : (data?.counts.confirmed ?? 0)}
           </strong>
           <span>Confirmados</span>
         </div>
@@ -65,29 +67,30 @@ export default function Dashboard() {
           <strong>
             {isLoading || error
               ? "—"
-              : (data?.filter((c) => c.status === "completed").length ?? 0)}
+              : (data?.counts.completed ?? 0)}
           </strong>
           <span>Atendidos</span>
         </div>
       </div>
       <div className="page-heading">
-        <h2>Turnos por atender</h2>
+        <h2>Turnos próximos o en curso</h2>
         <Link href={home + "/agenda"}>Ver todos los turnos →</Link>
       </div>
       {isLoading ? (
         <p role="status">Cargando turnos…</p>
-      ) : !error && open.length === 0 ? (
+      ) : !error && upcoming.length === 0 ? (
         <div className="card empty">
-          <h2>Tu agenda está libre</h2>
+          <h2>No tenés turnos próximos</h2>
           <p>
             {isDoctor
-              ? "Configurá los días y horarios en los que atendés para recibir reservas."
-              : "Cuando reserves un turno, vas a encontrarlo acá."}
+              ? "Podés configurar tu disponibilidad para recibir nuevas reservas."
+              : "Cuando reserves un nuevo turno, vas a encontrarlo acá."}
+            {" Los turnos anteriores siguen disponibles en tu agenda."}
           </p>
         </div>
       ) : (
         <div className="stack">
-          {open.slice(0, 5).map((c) => (
+          {upcoming.map((c) => (
             <article key={c.id} className="card appointment-card">
               <div>
                 <span className={"badge " + c.status}>

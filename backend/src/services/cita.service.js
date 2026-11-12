@@ -116,6 +116,42 @@ async function validateSlot(doctorId, patientId, data, transaction, excludeId) {
 }
 
 class CitaService {
+  async getSummary(userId, role) {
+    const scope = {
+      [role === "patient" ? "patient_user_id" : "doctor_user_id"]: userId,
+    };
+    const now = nowLocal();
+    const today = now.slice(0, 10);
+    const time = now.slice(11) + ":00";
+    const [totals, upcoming] = await Promise.all([
+      db.Cita.findAll({
+        where: scope,
+        attributes: [
+          "status",
+          [db.Sequelize.fn("COUNT", db.Sequelize.col("id")), "total"],
+        ],
+        group: ["status"],
+        raw: true,
+      }),
+      db.Cita.findAll({
+        where: {
+          ...scope,
+          status: active,
+          [Op.or]: [
+            { appointment_date: { [Op.gt]: today } },
+            { appointment_date: today, end_time: { [Op.gt]: time } },
+          ],
+        },
+        include: includes,
+        order: [["appointment_date", "ASC"], ["start_time", "ASC"], ["id", "ASC"]],
+        limit: 5,
+      }),
+    ]);
+    const counts = { pending: 0, confirmed: 0, completed: 0, canceled: 0 };
+    for (const row of totals) counts[row.status] = Number(row.total);
+    return { counts, upcoming };
+  }
+
   async getSlots(doctorId, date, user, excludeId) {
     doctorId = positiveId(doctorId);
     date = validDate(date);

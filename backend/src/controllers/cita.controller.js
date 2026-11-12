@@ -1,5 +1,8 @@
 import CitaService from "../services/cita.service.js";
 class CitaController {
+  async getResumen(req, res) {
+    res.json(await CitaService.getSummary(req.user.id, req.user.role));
+  }
   async agendarCita(req, res) {
     const cita = await CitaService.agendarCita(req.user.id, req.body || {});
     res

@@ -4,6 +4,7 @@ import { protect, authorize } from "../middlewares/auth.middleware.js";
 import { handle } from "../utils/errors.js";
 const router = Router();
 router.use(protect);
+router.get("/resumen", authorize("patient", "doctor"), handle(CitaController.getResumen));
 router.post("/", authorize("patient"), handle(CitaController.agendarCita));
 router.get(
   "/paciente/me",
