@@ -1,111 +1,77 @@
 import AuthService from "../services/auth.service.js";
-
+import { fail } from "../utils/errors.js";
+const cookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax",
+  path: "/",
+};
+const normalizeEmail = (v) =>
+  typeof v === "string" ? v.trim().toLowerCase() : "";
 class AuthController {
   async register(req, res) {
-    try {
-      const userData = req.body;
+    const data = req.body || {},
+      email = normalizeEmail(data.email);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254)
+      fail(400, "Ingresá un correo electrónico válido.");
+    for (const key of ["first_name", "last_name"]) {
       if (
-        !userData.email ||
-        !userData.password ||
-        !userData.first_name ||
-        !userData.last_name ||
-        !userData.role
-      ) {
-        return res.status(400).json({
-          message:
-            "Faltan campos obligatorios: email, password, firstName, lastName, role.",
-        });
-      }
-      if (!["patient", "doctor"].includes(userData.role)) {
-        return res
-          .status(400)
-          .json({ message: 'Rol no válido. Debe ser "patient" o "doctor".' });
-      }
-      if (userData.role === "doctor" && !userData.speciality) {
-        return res.status(400).json({
-          message: "Para el rol de doctor, la especialidad es obligatoria.",
-        });
-      }
-
-      const newUser = await AuthService.registerUser(userData);
-      res
-        .status(201)
-        .json({ message: "Usuario registrado exitosamente.", user: newUser });
-    } catch (error) {
-      console.error("Error en AuthController.register:", error.message); // para depurar
-      res
-        .status(error.statusCode || 500)
-        .json({ message: error.message || "Ocurrió un error en el servidor." });
+        typeof data[key] !== "string" ||
+        data[key].trim().length < 2 ||
+        data[key].trim().length > 100
+      )
+        fail(400, "Nombre y apellido deben tener entre 2 y 100 caracteres.");
     }
-  }
-
-  // LOGIN
-  async login(req, res) {
-    console.log("Cuerpo de la petición (req.body):", req.body);
-    console.log("Headers de la petición (req.headers):", req.headers);
-    try {
-      const { email, password } = req.body;
-
-      if (!email || !password) {
-        return res.status(400).json({
-          message: "El correo electrónico y la contraseña son obligatorios.",
-        });
-      }
-
-      const { token, user } = await AuthService.loginUser(email, password);
-
-      // Configurar la cookie con el JWT
-      // La cookie se llamará 'sessionToken' (puedes elegir otro nombre)
-      res.cookie("sessionToken", token, {
-        httpOnly: true, // La cookie no es accesible por JavaScript del lado del cliente (más seguro)
-        secure: process.env.NODE_ENV === "production", // Usar true en producción (solo HTTPS)
-        sameSite: "strict", // 'strict' o 'lax'. Ayuda a prevenir ataques CSRF.
-        maxAge: 24 * 60 * 60 * 1000, // Duración de la cookie en milisegundos (ej. 1 día)
-        // Coincide con la expiración del token '1d'
-        // path: '/', // Opcional: la cookie es válida para todas las rutas
-      });
-
-      // Enviar respuesta exitosa
-      // El frontend puede usar la información del usuario para actualizar la UI
-      // y sabrá que la sesión está establecida por la presencia de la cookie.
-      res.status(200).json({
-        message: "Inicio de sesión exitoso.",
-        user, // Contiene la info del usuario sin el hash de la contraseña
-        // No es estrictamente necesario devolver el token en el cuerpo si va en la cookie,
-        // pero a veces es útil para el frontend si necesita acceder a él directamente.
-        // token // Puedes decidir si lo incluyes o no.
-      });
-    } catch (error) {
-      console.error("Error en AuthController.login:", error.message);
-      // Si el error viene del servicio, ya debería tener un statusCode
-      res
-        .status(error.statusCode || 500)
-        .json({ message: error.message || "Ocurrió un error en el servidor." });
-    }
-  }
-
-  async logout(req, res) {
-    try {
-      // Limpiar la cookie del token de sesión
-      res.cookie("sessionToken", "", {
-        httpOnly: true,
-        expires: new Date(0), // Configura la cookie para que expire inmediatamente
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
-        // path: '/',
-      });
-      res.status(200).json({ message: "Cierre de sesión exitoso." });
-    } catch (error) {
-      console.error("Error en AuthController.logout:", error.message);
-      res.status(500).json({ message: "Error al cerrar sesión." });
-    }
-  }
-
-  async confirmEmail(req, res) {
+    if (
+      typeof data.password !== "string" ||
+      data.password.length < 8 ||
+      Buffer.byteLength(data.password, "utf8") > 72
+    )
+      fail(
+        400,
+        "La contraseña debe tener al menos 8 caracteres y hasta 72 bytes.",
+      );
+    if (!["patient", "doctor"].includes(data.role))
+      fail(400, "Seleccioná paciente o profesional.");
+    if (
+      data.role === "doctor" &&
+      (typeof data.speciality !== "string" ||
+        data.speciality.trim().length < 3 ||
+        data.speciality.trim().length > 255)
+    )
+      fail(400, "Ingresá una especialidad válida.");
+    if (data.gender && !["male", "female", "other"].includes(data.gender))
+      fail(400, "Género inválido.");
+    const user = await AuthService.registerUser({
+      email,
+      password: data.password,
+      role: data.role,
+      first_name: data.first_name.trim(),
+      last_name: data.last_name.trim(),
+      speciality: data.role === "doctor" ? data.speciality.trim() : undefined,
+      gender: data.gender || undefined,
+    });
     res
-      .status(501)
-      .json({ message: "Confirmación de email no implementada todavía." });
+      .status(201)
+      .json({ message: "Cuenta creada. Ya podés iniciar sesión.", user });
+  }
+  async login(req, res) {
+    const email = normalizeEmail(req.body?.email),
+      password = req.body?.password;
+    if (
+      !email ||
+      typeof password !== "string" ||
+      !password ||
+      Buffer.byteLength(password, "utf8") > 72
+    )
+      fail(400, "Ingresá correo y contraseña válidos.");
+    const { token, user } = await AuthService.loginUser(email, password);
+    res.cookie("sessionToken", token, { ...cookieOptions, maxAge: 86400000 });
+    res.json({ message: "Sesión iniciada.", user });
+  }
+  async logout(req, res) {
+    res.clearCookie("sessionToken", cookieOptions);
+    res.json({ message: "Sesión cerrada." });
   }
 }
-
 export default new AuthController();

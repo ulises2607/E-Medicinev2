@@ -1,40 +1,28 @@
+import "dotenv/config";
 import { Sequelize } from "sequelize";
-import dotenv from "dotenv";
-
-dotenv.config(); // Asegúrate que las variables de entorno estén cargadas
-
-// Configuración para Supabase PostgreSQL
+if (!process.env.DATABASE_URL)
+  throw new Error("Falta DATABASE_URL en backend/.env.");
 const sequelize = new Sequelize(process.env.DATABASE_URL, {
   dialect: "postgres",
-  logging: process.env.NODE_ENV === "development" ? console.log : false,
-  dialectOptions: {
-    ssl: {
-      require: true,
-      rejectUnauthorized: false,
-    },
-  },
+  logging: false,
+  dialectOptions:
+    process.env.DB_SSL === "true"
+      ? {
+          ssl: {
+            require: true,
+            rejectUnauthorized:
+              process.env.DB_SSL_REJECT_UNAUTHORIZED !== "false",
+          },
+        }
+      : {},
+  pool: { max: 5, min: 0, idle: 10000 },
   define: {
+    schema: process.env.DB_SCHEMA || "public",
     timestamps: true,
     underscored: true,
     createdAt: "created_at",
     updatedAt: "updated_at",
   },
 });
-
-// Función para probar la conexión
-export const testDbConnection = async () => {
-  try {
-    await sequelize.authenticate();
-    console.log(
-      "Conexión a PostgreSQL establecida exitosamente con Sequelize."
-    );
-  } catch (error) {
-    console.error(
-      "No se pudo conectar a la base de datos con Sequelize:",
-      error
-    );
-    process.exit(1); // Termina la aplicación si no se puede conectar
-  }
-};
-
-export default sequelize; // Exporta la instancia para usarla en los modelos y DAOs
+export const testDbConnection = () => sequelize.authenticate();
+export default sequelize;
